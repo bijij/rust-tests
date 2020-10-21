@@ -12,8 +12,8 @@ fn main() {
 
     let json_str = String::from_utf8_lossy(&output.stdout);
 
-    let i3_response = json::parse(&json_str).unwrap();
     // parse on it's own would be ambiguous
+    let i3_response = json::parse(&json_str).unwrap();
 
     let members = i3_response.members();
 
