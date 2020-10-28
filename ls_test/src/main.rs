@@ -8,10 +8,8 @@ const SEP: &str = "  ";
 const SEP_LEN: usize = SEP.len();
 
 // Mess around with those if you want
-const FOLDER_COLOR: (u8, u8, u8) = (0, 153, 255);
 const SYMLINK_COLOR: (u8, u8, u8) = (53, 204, 53);
 const UNKNOWN_COLOR: (u8, u8, u8) = (255, 0, 0);
-const DOTFILES_COLOR: (u8, u8, u8) = (235, 52, 198);
 const MIN_COLOR_SUM: u32 = 500;
 
 
@@ -62,11 +60,11 @@ impl Entry {
     /// Helper function that turns a string into a rgb tuple
     fn determine_color_from_string(string: &mut String) -> (u8, u8, u8) {
         unsafe {
-            let mut prod: u32 = 2;
+            let mut sum: u32 = 2;
             for n in string.as_mut_vec().iter() {
-                prod *= *n as u32;
+                sum += *n as u32;
             }
-            let (green, blue): (u32, u32) = (prod / 255, prod % 255); // I miss divmod
+            let (green, blue): (u32, u32) = (sum / 255, sum % 255); // I miss divmod
             let (mut red, green): (u32, u32) = (green / 255, green % 255);
             red %= 255;
 
@@ -107,7 +105,10 @@ impl Entry {
     /// Eh
     fn extension_to_color(entry: &fs::DirEntry) -> (u8, u8, u8) {
         match entry.path().extension() {
-            None => DOTFILES_COLOR, // dotfiles
+            None => {
+                let mut fn_str: String = entry.file_name().to_string_lossy().to_string();
+                Entry::determine_color_from_string(&mut fn_str)
+            },
             Some(ext) => {
                 match ext.to_str() {
                     None => UNKNOWN_COLOR,
@@ -124,7 +125,11 @@ impl Entry {
     /// Returns pink if no extension, red if it contains invalid utf8 chars 
     fn determine_color_from_entry(entry: &fs::DirEntry, type_: &EntryType) -> (u8, u8, u8) {
         match type_ {
-            &EntryType::Directory => FOLDER_COLOR,
+            &EntryType::Directory => {
+                let mut dn_str: String = entry.file_name().to_string_lossy().to_string();
+                Entry::determine_color_from_string(&mut dn_str)
+
+            },
             &EntryType::Symlink => SYMLINK_COLOR,
             &EntryType::Unknown => UNKNOWN_COLOR,
             &EntryType::File => {
@@ -156,6 +161,24 @@ impl Entry {
         self // don't question this, it works
     }
 
+    /// formats a text, ig, can defo be optimize to reduce the amount of format! calls
+    /// 0 - Normal Style
+    /// 1 - Bold
+    /// 2 - Dim
+    /// 3 - Italic
+    /// 4 - Underlined
+    /// 5 - Blinking
+    /// 7 - Reverse
+    /// 8 - Invisible
+    /// TODO: Handle the padding so the formatting comes first
+    fn format_filename(txt: String, codes: Vec<u8>) -> String {
+        let mut txt = txt.clone().to_string();
+        for code in codes {
+            txt = format!("\x1b[{}m{}\x1b[0m", code, txt);
+        }
+        txt
+    }
+
     /// Returns the filename with it's proper ansi seq
     pub fn get_coloured_file_name(&self) -> String {
         let str_filename: String = self.file_name
@@ -168,11 +191,16 @@ impl Entry {
             "\x1B[38;2;{};{};{}m{}\x1B[0;00m", 
             r, g, b, str_filename);
 
-        // Boldify it, keeping them separate while I decide
-        // whether to keep it or not
-        format!("\x1b[1m{}\x1b[0m", coloured)
+        match self.type_ {
+            EntryType::File => Entry::format_filename(coloured, vec![1]),
+            EntryType::Directory => Entry::format_filename(coloured, vec![1, 7]),
+            EntryType::Symlink => Entry::format_filename(coloured, vec![3, 4]),
+            EntryType::Unknown => Entry::format_filename(coloured, vec![7, 4, 1]),
+        }
     }
 }
+            
+
 
 impl Eq for Entry {} // empty but needed for some reson
 
