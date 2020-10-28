@@ -1,2 +1,1 @@
-# Scripts
-Trying to learn rust so I just make shitposts
+"Me after saying gracias to the japanese waiter" except that the waiter is rust.
