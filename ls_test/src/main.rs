@@ -279,5 +279,6 @@ fn main() {
         display_one_line(&dir_entries);
     } else {
         display_multiline(&mut dir_entries, longest_name, term_width);
+        // Should be rotate it so entries are sorted in columns instead of lines
     }
 }
