@@ -168,7 +168,9 @@ impl Entry {
             "\x1B[38;2;{};{};{}m{}\x1B[0;00m", 
             r, g, b, str_filename);
 
-        coloured
+        // Boldify it, keeping them separate while I decide
+        // whether to keep it or not
+        format!("\x1b[1m{}\x1b[0m", coloured)
     }
 }
 
