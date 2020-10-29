@@ -33,22 +33,21 @@ pub struct Entry {
 impl Entry {
     /// Determines whether the entry is a file, dir, symlink or unknown
     fn determine_type_from_entry(entry: &fs::DirEntry) -> EntryType {
-        match entry.metadata() {
-            Ok(metadata) => {
-                if metadata.is_file() {
-                    EntryType::File
-                } else if metadata.is_dir() {
-                    EntryType::Directory
-                } else {
-                    EntryType::Symlink
-                }
-            },
-            Err(_) => EntryType::Unknown,
+        if let Ok(metadata) = entry.metadata() {
+            if metadata.is_file() {
+                EntryType::File
+            } else if metadata.is_dir() {
+                EntryType::Directory
+            } else {
+                EntryType::Symlink
+            }
+        } else {
+            EntryType::Unknown
         }
     }
-    
-    fn sort_lowest_colors_indexes(lowest_colors_indexes: &mut Vec<usize>, 
-                                  max_color_index: usize, 
+
+    fn sort_lowest_colors_indexes(lowest_colors_indexes: &mut Vec<usize>,
+                                  max_color_index: usize,
                                   colors: &[u32; 3]) {
 
         lowest_colors_indexes.remove(max_color_index);
@@ -56,7 +55,7 @@ impl Entry {
             lowest_colors_indexes.reverse();
         }
     }
-   
+
     /// Helper function that turns a string into a rgb tuple
     fn determine_color_from_string(string: &mut String) -> (u8, u8, u8) {
         unsafe {
@@ -95,34 +94,30 @@ impl Entry {
                     }
                 }
                 return (colors[0] as u8, colors[1] as u8, colors[2] as u8);
-                
+
             } else {
                 (red as u8, green as u8, blue as u8)
             }
         }
     }
-    
+
     /// Eh
     fn extension_to_color(entry: &fs::DirEntry) -> (u8, u8, u8) {
-        match entry.path().extension() {
-            None => {
-                let mut fn_str: String = entry.file_name().to_string_lossy().to_string();
-                Entry::determine_color_from_string(&mut fn_str)
-            },
-            Some(ext) => {
-                match ext.to_str() {
-                    None => UNKNOWN_COLOR,
-                    Some(ext_str) => {
-                        let mut string: String = String::from(ext_str);
-                        Entry::determine_color_from_string(&mut string)
-                    }
-                }
+        if let Some(ext) = entry.path().extension() {
+            if let Some(ext_str) = ext.to_str() {
+                let mut string: String = String::from(ext_str);
+                Entry::determine_color_from_string(&mut string)
+            } else {
+                UNKNOWN_COLOR
             }
+        } else {
+            let mut fn_str: String = entry.file_name().to_string_lossy().to_string();
+            Entry::determine_color_from_string(&mut fn_str)
         }
     }
 
     /// Determines a color depending on extension
-    /// Returns pink if no extension, red if it contains invalid utf8 chars 
+    /// Returns pink if no extension, red if it contains invalid utf8 chars
     fn determine_color_from_entry(entry: &fs::DirEntry, type_: &EntryType) -> (u8, u8, u8) {
         match type_ {
             &EntryType::Directory => {
@@ -149,7 +144,7 @@ impl Entry {
             entry,
         }
     }
-    
+
     /// Pads the current filename for alignment
     pub fn pad_filename(&mut self, longest_name: usize) -> &mut Entry {
         let filename_len: usize = self.file_name.len();
@@ -188,7 +183,7 @@ impl Entry {
 
         let (r, g, b): &(u8, u8, u8) = &self.color;
         let coloured: String = format!(
-            "\x1B[38;2;{};{};{}m{}\x1B[0;00m", 
+            "\x1B[38;2;{};{};{}m{}\x1B[0;00m",
             r, g, b, str_filename);
 
         match self.type_ {
@@ -198,8 +193,16 @@ impl Entry {
             EntryType::Unknown => Entry::format_filename(coloured, vec![7, 4, 1]),
         }
     }
+
+    fn find_ext(&self) -> String {
+        let path: &path::PathBuf = &self.entry.path();
+        if let Some(ext) = path.extension() {
+            ext.to_str().unwrap_or("").to_string()
+        } else {
+                return String::from("")
+        }
+    }
 }
-            
 
 
 impl Eq for Entry {} // empty but needed for some reson
@@ -212,23 +215,13 @@ impl PartialEq for Entry {
 
 impl Ord for Entry {
     fn cmp(&self, other: &Self) -> cmp::Ordering {
-
         let left_path: &path::PathBuf = &self.entry.path();
-        let left_ext: String = {
-            match left_path.extension() {
-                None => String::from(""),
-                Some(ext) => ext.to_str().unwrap_or("").to_string(),
-            }
-        };
+        let right_path: &path::PathBuf = &other.entry.path();
 
-       let right_path: &path::PathBuf = &other.entry.path();
-       let right_ext: String = {
-           match right_path.extension() {
-               None => String::from(""),
-               Some(ext) => ext.to_str().unwrap_or("").to_string(),
-           }
-       };
-       (&self.type_, left_ext, left_path).cmp(&(&other.type_, right_ext, right_path))
+        let left_ext: String = self.find_ext();
+        let right_ext: String = other.find_ext();
+
+        (&self.type_, left_ext, left_path).cmp(&(&other.type_, right_ext, right_path))
     }
 }
 
@@ -266,7 +259,7 @@ fn display_multiline(dir_entries: &mut Vec<Entry>, longest_name: usize, term_wid
         .iter_mut()
         .map(|entry| entry.pad_filename(longest_name))
         .collect();
-        
+
     let per_line: usize = term_width / (longest_name + SEP_LEN);
 
     let mut temp: Vec<String> = Vec::new();
@@ -297,18 +290,17 @@ fn main() {
         .collect();
 
     dir_entries.sort();
-    
-    let term_width: usize = match term_size::dimensions() {
-        Some((w, _)) => w,
-        None => panic!("Failed to get term size")
-    };
 
-    let (total_length, longest_name): (usize, usize) = get_metrics(&dir_entries);
+    if let Some((term_width, _)) = term_size::dimensions() {
+        let (total_length, longest_name): (usize, usize) = get_metrics(&dir_entries);
 
-    if total_length <= term_width {
-        display_one_line(&dir_entries);
+        if total_length <= term_width {
+            display_one_line(&dir_entries);
+        } else {
+            display_multiline(&mut dir_entries, longest_name, term_width);
+            // Should be rotate it so entries are sorted in columns instead of lines
+        }
     } else {
-        display_multiline(&mut dir_entries, longest_name, term_width);
-        // Should be rotate it so entries are sorted in columns instead of lines
-    }
+        panic!("Failed to get term size")
+    };
 }
